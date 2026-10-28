@@ -1,9 +1,16 @@
 import { dueDateFor } from "@/lib/sla";
-import type { Category, Customer, Priority, Ticket, TicketSource, TicketStatus } from "@/lib/types";
+import type { Category, Customer, Zone, Priority, Ticket, TicketSource, TicketStatus } from "@/lib/types";
 
 // FICTIONAL customers. All phone numbers use 555 and all emails use ".example"
 // domains, which can never belong to a real business.
-const customers: Customer[] = [
+// Which zone each (fictional) town is in.
+const TOWN_ZONES: Record<string, Zone> = {
+  Riverside: "North", "Cedar Falls": "North", Fairview: "South",
+  Oakdale: "Central", Lakewood: "East", "Maple Grove": "West",
+};
+const withZone = (c: Omit<Customer, "zone">): Customer => ({ ...c, zone: TOWN_ZONES[c.address.split(", ").pop()!] });
+
+const customers: Customer[] = ([
   { name: "Linda Park", company: "Harborview Medical Offices", address: "120 Harbor St, Riverside", phone: "(555) 310-0101", email: "lpark@harborviewmed.example" },
   { name: "Mike Delgado", company: "Delgado Auto Group", address: "4400 Route 9, Fairview", phone: "(555) 310-0102", email: "mike@delgadoauto.example" },
   { name: "Sarah Whitman", company: "Oakdale Public Library", address: "15 Library Ln, Oakdale", phone: "(555) 310-0103", email: "swhitman@oakdalelibrary.example" },
@@ -22,7 +29,7 @@ const customers: Customer[] = [
   { name: "Chris Bauer", company: "Bauer Logistics Warehouse", address: "77 Freight Rd, Cedar Falls", phone: "(555) 310-0116", email: "cbauer@bauerlogistics.example" },
   { name: "Nina Patel", company: "Patel Pharmacy", address: "210 Oak St, Oakdale", phone: "(555) 310-0117", email: "nina@patelpharmacy.example" },
   { name: "Greg Owens", company: "Iron Peak Fitness", address: "990 Gym Ln, Maple Grove", phone: "(555) 310-0118", email: "greg@ironpeakfit.example" },
-];
+] as Omit<Customer, "zone">[]).map(withZone);
 
 const HOUR = 3600_000;
 

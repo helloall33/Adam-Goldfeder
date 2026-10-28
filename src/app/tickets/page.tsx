@@ -107,7 +107,7 @@ function TicketList() {
                 </td>
                 <td className="px-4 py-3 align-top">
                   <div>{t.customer.company}</div>
-                  <div className="text-xs text-slate-500">{t.customer.address}</div>
+                  <div className="text-xs text-slate-500">{t.customer.address} · {t.customer.zone}</div>
                 </td>
                 <td className="px-4 py-3 align-top whitespace-nowrap">{t.category}</td>
                 <td className="px-4 py-3 align-top"><PriorityBadge priority={t.priority} /></td>

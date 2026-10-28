@@ -8,8 +8,10 @@ import { useStore } from "@/lib/store";
 const NAV = [
   { href: "/", label: "Dashboard", icon: "▦" },
   { href: "/tickets", label: "Service Tickets", icon: "☰" },
+  { href: "/tickets/from-email", label: "Email → Ticket", icon: "✨" },
   { href: "/tickets/new", label: "New Ticket", icon: "+" },
   { href: "/technicians", label: "Technicians", icon: "👷" },
+  { href: "/me", label: "Technician View", icon: "📱" },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {

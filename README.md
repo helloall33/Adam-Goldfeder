@@ -9,6 +9,9 @@ an operations dashboard, service tickets, and technician management.
 - **Service Tickets**: search and filter tickets. Open one to change its status or priority, assign a technician, and add notes.
 - **Suggested technicians**: chosen by skill and current workload. A person always makes the final choice.
 - **Technicians**: 25 fictional techs with their skills, certifications, availability, vans, and open jobs.
+- **Email → Ticket (AI)**: paste a customer email; Claude fills in the customer, address, problem type, priority and anything missing. A person checks it and clicks Create.
+- **Location matching**: technicians in the customer's zone are suggested first.
+- **Technician View** (`/me`): a phone-friendly page where a tech marks "In today" / "Out today" and starts or completes jobs. Marking "Out" flags their jobs for the office to reassign.
 - **Human review**: urgent tickets are flagged for a person. The app never contacts emergency services.
 
 Changes are saved in your web browser. Click **Reset demo data** (bottom left) to start fresh.
@@ -21,6 +24,7 @@ Changes are saved in your web browser. Click **Reset demo data** (bottom left) t
    npm run dev
    ```
 3. Open http://localhost:3000 in your browser.
+4. For the AI feature: copy `.env.example` to `.env.local` and paste your Anthropic API key into it.
 
 ## Changing things
 Ask Claude Code in plain English, e.g. *"Add a 'Contract number' field to tickets"*.

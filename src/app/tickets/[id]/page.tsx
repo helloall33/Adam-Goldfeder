@@ -132,7 +132,7 @@ export default function TicketDetailPage() {
             <dl className="text-sm space-y-1">
               <div className="font-medium">{ticket.customer.company}</div>
               <div>{ticket.customer.name}</div>
-              <div className="text-slate-600">{ticket.customer.address}</div>
+              <div className="text-slate-600">{ticket.customer.address} · {ticket.customer.zone} zone</div>
               <div><a className="text-blue-700 hover:underline" href={`tel:${ticket.customer.phone}`}>{ticket.customer.phone}</a></div>
               <div><a className="text-blue-700 hover:underline break-all" href={`mailto:${ticket.customer.email}`}>{ticket.customer.email}</a></div>
             </dl>

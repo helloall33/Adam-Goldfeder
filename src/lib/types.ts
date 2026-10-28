@@ -23,10 +23,15 @@ export type Category = (typeof CATEGORIES)[number];
 
 export type TicketSource = "Email" | "Phone" | "Manual";
 
+// Service areas. Each customer site and each technician belongs to one.
+export const ZONES = ["North", "South", "East", "West", "Central"] as const;
+export type Zone = (typeof ZONES)[number];
+
 export interface Customer {
   name: string; // contact person
   company: string;
   address: string;
+  zone: Zone; // service area the site is in
   phone: string;
   email: string;
 }
@@ -63,7 +68,7 @@ export interface Technician {
   id: string; // e.g. "T01"
   name: string;
   phone: string;
-  zone: string; // service area they usually cover
+  zone: Zone; // service area they usually cover
   skills: Category[];
   certifications: string[];
   duty: DutyStatus;

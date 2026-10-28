@@ -7,6 +7,7 @@ and tell them exactly what to click/run to test.
 ## Tech
 - Next.js 15 (App Router) + React 19 + TypeScript + Tailwind CSS v4.
 - Run locally: `npm install` then `npm run dev` → http://localhost:3000
+- Hosted on Vercel (auto-deploys from GitHub `main`). Repo: helloall33/Adam-Goldfeder.
 - Check for errors before committing: `npm run build`
 
 ## Where things live
@@ -14,10 +15,15 @@ and tell them exactly what to click/run to test.
 - `src/lib/store.tsx` — the ONLY place data is read/saved. Currently browser localStorage.
   Swap this for a database / Google Sheets later without touching pages.
 - `src/lib/sla.ts` — due-time rules per priority (what counts as "overdue").
-- `src/lib/recommend.ts` — rule-based technician suggestions.
+- `src/lib/recommend.ts` — rule-based technician suggestions (skill, duty, same zone, workload). Weights at top.
+- `src/lib/ai.ts` — ALL Claude API code (server-only). Prompt/instructions + output schema for email → ticket.
+- `src/app/api/parse-email/route.ts` — server endpoint the browser calls; needs `ANTHROPIC_API_KEY`.
 - `src/data/` — fictional seed data (25 technicians, ~30 tickets, dates relative to "now").
-- `src/app/` — pages: `/` dashboard, `/tickets`, `/tickets/[id]`, `/tickets/new`, `/technicians`.
-- `src/components/` — shared UI (sidebar menu, badges, stat cards).
+- `src/app/` — pages: `/` dashboard, `/tickets`, `/tickets/[id]`, `/tickets/new`, `/tickets/from-email` (AI),
+  `/technicians`, `/me` (technician phone view — demo picks a tech instead of logging in).
+- `src/components/` — shared UI (sidebar menu, badges, stat cards, `TicketForm` used by manual + AI pages).
+- `src/data/sampleEmails.ts` — fake customer emails for demoing the AI.
+- Changing the data shape? Bump `STORAGE_KEY` in `store.tsx` so browsers reload fresh demo data.
 
 ## Rules (do not break)
 - Fictional data only. Never connect real company systems without explicit authorization.
@@ -26,7 +32,8 @@ and tell them exactly what to click/run to test.
   for human review (`needsReview`) — a person decides.
 
 ## Roadmap
-1. ✅ Stage 1: dashboard, tickets, technicians, fictional data.
-2. Stage 2: paste an email → Claude API extracts a structured ticket (server-side API route, key in `.env.local`).
+1. ✅ Stage 1: dashboard, tickets, technicians, fictional data. + zone matching, technician phone view.
+2. ✅ Stage 2: paste an email → Claude extracts a structured ticket; a person reviews before creating.
+   Key: `.env.local` locally, Vercel → Settings → Environment Variables in production.
 3. Stage 3: Gmail (test account) → tickets; Google Sheets sync. OAuth, test data only.
 4. Stage 4: AI daily management summary; optional scheduled email.

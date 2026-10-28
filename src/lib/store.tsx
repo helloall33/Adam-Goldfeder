@@ -15,7 +15,7 @@ import { seedTechnicians } from "@/data/technicians";
 import { dueDateFor } from "./sla";
 import type { AppData, Category, Customer, DutyStatus, Priority, Ticket, TicketSource, TicketStatus } from "./types";
 
-const STORAGE_KEY = "sherlock-ops-data-v1";
+const STORAGE_KEY = "sherlock-ops-data-v2"; // bump the number when the data shape changes — forces fresh demo data
 const CURRENT_USER = "Office Staff"; // placeholder until we add logins
 
 function freshData(): AppData {
@@ -127,7 +127,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return ticket;
     },
     setTechDuty: (techId, duty) =>
-      setData((d) => d && { ...d, technicians: d.technicians.map((t) => (t.id === techId ? { ...t, duty } : t)) }),
+      setData((d) => {
+        if (!d) return d;
+        const name = techName(techId);
+        const at = new Date().toISOString();
+        return {
+          ...d,
+          technicians: d.technicians.map((t) => (t.id === techId ? { ...t, duty } : t)),
+          // If a tech is out, flag their unfinished jobs so the office can reassign them.
+          // (We never reassign automatically — a person decides.)
+          tickets:
+            duty === "On Duty"
+              ? d.tickets
+              : d.tickets.map((t) =>
+                  t.assignedTechId === techId && t.status !== "Completed"
+                    ? {
+                        ...t,
+                        needsReview: true,
+                        reviewReason: `${name} is now "${duty}". Reassign this job?`,
+                        notes: [...t.notes, { at, author: name, text: `Technician marked "${duty}"` }],
+                      }
+                    : t,
+                ),
+        };
+      }),
     resetDemoData: () => setData(freshData()),
   };
 
