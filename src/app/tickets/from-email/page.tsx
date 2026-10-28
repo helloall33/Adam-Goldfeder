@@ -6,12 +6,17 @@
 // (Stage 3 will pull emails straight from Gmail instead of pasting.)
 // ─────────────────────────────────────────────────────────────
 
+import Link from "next/link";
 import { useState } from "react";
+import { useStore } from "@/lib/store";
 import TicketForm, { EMPTY_FORM, type TicketFormValues } from "@/components/TicketForm";
 import { SAMPLE_EMAILS } from "@/data/sampleEmails";
 import type { ExtractedTicket } from "@/lib/ai";
+import type { Zone } from "@/lib/types";
 
 export default function FromEmailPage() {
+  const { data, createTicket } = useStore();
+  const [autoCreatedId, setAutoCreatedId] = useState<string | null>(null);
   const [emailText, setEmailText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -19,7 +24,7 @@ export default function FromEmailPage() {
   const [formKey, setFormKey] = useState(0); // forces the form to refresh with new AI results
 
   const readEmail = async () => {
-    setLoading(true); setError(""); setResult(null);
+    setLoading(true); setError(""); setResult(null); setAutoCreatedId(null);
     try {
       const res = await fetch("/api/parse-email", {
         method: "POST",
@@ -28,7 +33,20 @@ export default function FromEmailPage() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Something went wrong.");
-      setResult(body.ticket);
+      const ai: ExtractedTicket = body.ticket;
+      if (canAutoCreate(ai)) {
+        // Autopilot: routine email → ticket created right away (and auto-assigned).
+        const t = createTicket(
+          {
+            customer: { company: ai.company, name: ai.customerName, address: ai.address, zone: ai.zone as Zone, phone: ai.phone, email: ai.email },
+            subject: ai.subject, description: emailText.trim(), category: ai.category, priority: ai.priority,
+            source: "Email", needsReview: false,
+          },
+          { byAutopilot: true, note: `AI read the email: ${ai.priority} priority — ${ai.priorityReason}${ai.missingInfo.length ? ` Missing info: ${ai.missingInfo.join("; ")}.` : ""}` },
+        );
+        setAutoCreatedId(t.id);
+      }
+      setResult(ai);
       setFormKey((k) => k + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -36,6 +54,18 @@ export default function FromEmailPage() {
       setLoading(false);
     }
   };
+
+  /** Routine emails are created automatically. Anything risky or incomplete goes to a person. */
+  function canAutoCreate(ai: ExtractedTicket): boolean {
+    return (
+      data.automation.settings.autoCreateFromEmail &&
+      !ai.needsHumanReview && !ai.possibleEmergency &&
+      ai.priority !== "Critical" && ai.category !== "Fire Alarm" &&
+      ai.zone !== "Unknown" && Boolean(ai.company && ai.address)
+    );
+  }
+  const autoTicket = autoCreatedId ? data.tickets.find((t) => t.id === autoCreatedId) : undefined;
+  const autoTech = data.technicians.find((t) => t.id === autoTicket?.assignedTechId);
 
   const formValues: TicketFormValues | null = result && {
     ...EMPTY_FORM,
@@ -58,7 +88,7 @@ export default function FromEmailPage() {
     <div className="max-w-6xl space-y-4">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">✨ Email → Ticket</h1>
-        <p className="text-sm text-slate-500">Paste a customer email. AI reads it and fills in the ticket, then you check it and click Create.</p>
+        <p className="text-sm text-slate-500">Paste a customer email. Routine requests become tickets automatically; anything urgent or unclear is shown to you to check.</p>
       </header>
 
       <div className="grid lg:grid-cols-2 gap-4 items-start">
@@ -95,7 +125,20 @@ export default function FromEmailPage() {
             </div>
           )}
           {loading && <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 animate-pulse">Reading the email…</div>}
-          {result && formValues && (
+          {autoTicket && (
+            <div className="rounded-lg border-2 border-emerald-500 bg-emerald-50 p-5 space-y-2 text-sm">
+              <p className="text-base font-semibold text-emerald-900">🤖 Done: no one had to touch this.</p>
+              <p>
+                Ticket <Link href={`/tickets/${autoTicket.id}`} className="font-mono text-blue-700 underline">{autoTicket.id}</Link> created
+                ({autoTicket.priority}, {autoTicket.category})
+                {autoTech ? <> and assigned to <strong>{autoTech.name}</strong> ({autoTech.zone} zone).</> : "."}
+              </p>
+              <p className="text-slate-700">{result?.priorityReason}</p>
+              {result && result.missingInfo.length > 0 && <p>❓ Still to ask the customer: {result.missingInfo.join("; ")}</p>}
+              <Link href={`/tickets/${autoTicket.id}`} className="inline-block rounded-md bg-slate-900 text-white px-3 py-1.5">Open ticket</Link>
+            </div>
+          )}
+          {result && formValues && !autoCreatedId && (
             <>
               {result.possibleEmergency && (
                 <div className="rounded-lg border-2 border-red-500 bg-red-50 p-3 text-sm text-red-900">

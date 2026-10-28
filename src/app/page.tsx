@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { isOverdue } from "@/lib/sla";
 import { timeAgo } from "@/lib/format";
 import { openJobCount, isBusyNow } from "@/lib/recommend";
+import { minutesSaved } from "@/lib/automation";
 import { CATEGORIES, STATUSES } from "@/lib/types";
 import StatCard from "@/components/StatCard";
 import { OverdueBadge, PriorityBadge, ReviewBadge, StatusBadge } from "@/components/Badges";
@@ -12,7 +13,7 @@ import { OverdueBadge, PriorityBadge, ReviewBadge, StatusBadge } from "@/compone
 const DAY = 24 * 3600_000;
 
 export default function DashboardPage() {
-  const { data } = useStore();
+  const { data, undoAutomation } = useStore();
   const now = new Date();
   const { tickets, technicians } = data;
 
@@ -32,6 +33,8 @@ export default function DashboardPage() {
   const busy = onDuty.filter((t) => isBusyNow(t.id, tickets));
 
   const attention = [...new Map([...review, ...overdue].map((t) => [t.id, t])).values()];
+  const autoLog = data.automation.log;
+  const hoursSaved = (minutesSaved(autoLog) / 60).toFixed(1);
 
   const byCategory = CATEGORIES.map((c) => ({ c, n: open.filter((t) => t.category === c).length })).filter((x) => x.n > 0);
   const maxCat = Math.max(1, ...byCategory.map((x) => x.n));
@@ -56,13 +59,14 @@ export default function DashboardPage() {
         </Link>
       </header>
 
-      <section className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <section className="grid grid-cols-2 md:grid-cols-4 2xl:grid-cols-7 gap-3">
         <StatCard label="Open tickets" value={open.length} href="/tickets" />
-        <StatCard label="Needs review" value={review.length} tone={review.length ? "warn" : "default"} href="/tickets?filter=review" hint="Human decision required" />
+        <StatCard label="Needs a person" value={review.length} tone={review.length ? "warn" : "default"} href="/tickets?filter=review" hint="Human decision required" />
         <StatCard label="Overdue" value={overdue.length} tone={overdue.length ? "alert" : "default"} href="/tickets?filter=overdue" />
         <StatCard label="New (24h)" value={newToday.length} />
         <StatCard label="Completed (24h)" value={completedToday.length} hint={`${completed7d.length} in last 7 days`} />
         <StatCard label="Avg. time to complete" value={`${avgHours.toFixed(1)}h`} hint="Last 7 days" />
+        <StatCard label="🤖 Hours saved" value={`${hoursSaved}h`} hint={`${autoLog.filter((e) => !e.undone).length} automatic actions`} href="/automation" />
       </section>
 
       {/* Pipeline: how many tickets are in each stage */}
@@ -82,11 +86,11 @@ export default function DashboardPage() {
         {/* Needs attention list */}
         <section className="lg:col-span-2 bg-white rounded-lg border border-slate-200">
           <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-            <h2 className="text-sm font-semibold">Needs attention</h2>
-            <span className="text-xs text-slate-500">Flagged for review or past due</span>
+            <h2 className="text-sm font-semibold">Needs a person</h2>
+            <span className="text-xs text-slate-500">Everything else is handled by the Autopilot</span>
           </div>
           {attention.length === 0 ? (
-            <p className="p-4 text-sm text-slate-500">Nothing needs attention right now. 🎉</p>
+            <p className="p-4 text-sm text-slate-500">Nothing needs a person right now. 🎉</p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {attention.map((t) => (
@@ -131,6 +135,29 @@ export default function DashboardPage() {
           </ul>
         </section>
       </div>
+
+      <section className="bg-white rounded-lg border border-slate-200">
+        <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+          <h2 className="text-sm font-semibold">🤖 Autopilot activity</h2>
+          <Link href="/automation" className="text-xs text-blue-700 hover:underline">Settings & full log →</Link>
+        </div>
+        {autoLog.length === 0 ? (
+          <p className="p-4 text-sm text-slate-500">No automatic actions yet.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {autoLog.slice(0, 6).map((e) => (
+              <li key={e.id} className={`flex flex-wrap items-center gap-2 px-4 py-2 text-sm ${e.undone ? "opacity-50 line-through" : ""}`}>
+                <Link href={`/tickets/${e.ticketId}`} className="font-mono text-xs text-blue-700 hover:underline w-16">{e.ticketId}</Link>
+                <span className="flex-1 min-w-48">{e.text}</span>
+                <span className="text-xs text-slate-400">{timeAgo(e.at, now)}</span>
+                {!e.undone && e.before && (
+                  <button onClick={() => undoAutomation(e.id)} className="text-xs rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50">Undo</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="bg-white rounded-lg border border-slate-200 p-4">
         <h2 className="text-sm font-semibold mb-3">Open tickets by type</h2>

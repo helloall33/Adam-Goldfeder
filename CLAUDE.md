@@ -16,6 +16,9 @@ and tell them exactly what to click/run to test.
   Swap this for a database / Google Sheets later without touching pages.
 - `src/lib/sla.ts` — due-time rules per priority (what counts as "overdue").
 - `src/lib/recommend.ts` — rule-based technician suggestions (skill, duty, same zone, workload). Weights at top.
+- `src/lib/automation.ts` — the Autopilot: auto-assign, reassign when a tech is out, escalate overdue,
+  `canAutomate()` safety rule, minutes-saved estimates, undo. Runs after every change (see `update()` in store).
+- `src/app/automation/page.tsx` — Autopilot on/off switches + activity log.
 - `src/lib/ai.ts` — ALL Claude API code (server-only). Prompt/instructions + output schema for email → ticket.
 - `src/app/api/parse-email/route.ts` — server endpoint the browser calls; needs `ANTHROPIC_API_KEY`.
 - `src/data/` — fictional seed data (25 technicians, ~30 tickets, dates relative to "now").
@@ -30,10 +33,13 @@ and tell them exactly what to click/run to test.
 - Never commit secrets. API keys go in `.env.local` (git-ignored), never in code.
 - The app must NEVER contact police/fire/emergency services. Urgent items are flagged
   for human review (`needsReview`) — a person decides.
+- The Autopilot must never act on Critical, Fire Alarm, flagged, or person-overridden (`manualOnly`) tickets.
+  Every automatic action is logged with an Undo.
 
 ## Roadmap
 1. ✅ Stage 1: dashboard, tickets, technicians, fictional data. + zone matching, technician phone view.
 2. ✅ Stage 2: paste an email → Claude extracts a structured ticket; a person reviews before creating.
    Key: `.env.local` locally, Vercel → Settings → Environment Variables in production.
+2b. ✅ Autopilot: routine work automated, people handle exceptions only.
 3. Stage 3: Gmail (test account) → tickets; Google Sheets sync. OAuth, test data only.
 4. Stage 4: AI daily management summary; optional scheduled email.

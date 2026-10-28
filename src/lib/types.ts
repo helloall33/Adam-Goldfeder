@@ -59,6 +59,8 @@ export interface Ticket {
   reviewReason?: string;
   source: TicketSource;
   notes: TicketNote[];
+  /** Set when a person overrides the Autopilot — it then leaves this ticket alone. */
+  manualOnly?: boolean;
 }
 
 export const DUTY_STATUSES = ["On Duty", "Off Today", "On Leave"] as const;
@@ -76,9 +78,31 @@ export interface Technician {
   yearsExperience: number;
 }
 
+// ── Autopilot (automation) ──
+export interface AutomationSettings {
+  autoCreateFromEmail: boolean;
+  autoAssign: boolean;
+  autoReassign: boolean;
+  autoEscalate: boolean;
+}
+
+export type AutomationKind = "create" | "assign" | "reassign" | "escalate";
+
+export interface AutomationLogEntry {
+  id: string;
+  at: string;
+  kind: AutomationKind;
+  ticketId: string;
+  text: string;
+  /** The ticket's previous values, so a person can undo the action. */
+  before?: Partial<Ticket>;
+  undone?: boolean;
+}
+
 /** Everything the app stores. */
 export interface AppData {
   tickets: Ticket[];
   technicians: Technician[];
   nextTicketNumber: number;
+  automation: { settings: AutomationSettings; log: AutomationLogEntry[] };
 }

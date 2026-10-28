@@ -12,6 +12,7 @@ const NAV = [
   { href: "/tickets/new", label: "New Ticket", icon: "+" },
   { href: "/technicians", label: "Technicians", icon: "👷" },
   { href: "/me", label: "Technician View", icon: "📱" },
+  { href: "/automation", label: "Autopilot", icon: "🤖" },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {

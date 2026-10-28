@@ -3,27 +3,32 @@
 // ─────────────────────────────────────────────────────────────
 // THE DATA STORE — the one place where tickets and technicians are kept.
 //
-// Right now (Stage 1) data is saved in the web browser's local storage,
+// Right now data is saved in the web browser's local storage,
 // so each computer has its own copy and "Reset demo data" restores the
 // sample data. In a later stage we can swap this file to save to a real
 // database or Google Sheets — the pages won't need to change.
+//
+// After every change, the Autopilot (lib/automation.ts) runs once.
 // ─────────────────────────────────────────────────────────────
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { createSeedTickets, SEED_NEXT_TICKET_NUMBER } from "@/data/tickets";
 import { seedTechnicians } from "@/data/technicians";
+import { AUTOPILOT, DEFAULT_SETTINGS, canAutomate, runAutopilot, undoAction } from "./automation";
 import { dueDateFor } from "./sla";
-import type { AppData, Category, Customer, DutyStatus, Priority, Ticket, TicketSource, TicketStatus } from "./types";
+import type { AppData, AutomationSettings, Category, Customer, DutyStatus, Priority, Ticket, TicketSource, TicketStatus } from "./types";
 
-const STORAGE_KEY = "sherlock-ops-data-v2"; // bump the number when the data shape changes — forces fresh demo data
+const STORAGE_KEY = "sherlock-ops-data-v3"; // bump the number when the data shape changes — forces fresh demo data
 const CURRENT_USER = "Office Staff"; // placeholder until we add logins
+const AUTOPILOT_EVERY_MS = 60_000; // also re-check once a minute (e.g. for jobs that just became overdue)
 
 function freshData(): AppData {
-  return {
+  return runAutopilot({
     tickets: createSeedTickets(),
     technicians: seedTechnicians,
     nextTicketNumber: SEED_NEXT_TICKET_NUMBER,
-  };
+    automation: { settings: DEFAULT_SETTINGS, log: [] },
+  });
 }
 
 export interface NewTicketInput {
@@ -44,8 +49,11 @@ interface Store {
   setPriority: (ticketId: string, priority: Priority) => void;
   addNote: (ticketId: string, text: string) => void;
   markReviewed: (ticketId: string) => void;
-  createTicket: (input: NewTicketInput) => Ticket;
+  /** byAutopilot = created automatically (e.g. from an email) rather than by a person. */
+  createTicket: (input: NewTicketInput, opts?: { byAutopilot?: boolean; note?: string }) => Ticket;
   setTechDuty: (techId: string, duty: DutyStatus) => void;
+  setAutomation: (settings: Partial<AutomationSettings>) => void;
+  undoAutomation: (logId: string) => void;
   resetDemoData: () => void;
 }
 
@@ -58,7 +66,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      setData(saved ? (JSON.parse(saved) as AppData) : freshData());
+      setData(saved ? runAutopilot(JSON.parse(saved) as AppData) : freshData());
     } catch {
       setData(freshData());
     }
@@ -74,20 +82,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [data]);
 
+  /** Every change goes through here, so the Autopilot runs after it. */
+  const update = useCallback((change: (d: AppData) => AppData) => {
+    setData((d) => d && runAutopilot(change(d)));
+  }, []);
+
+  // Let the Autopilot check in regularly while the app is open.
+  useEffect(() => {
+    const timer = setInterval(() => update((d) => d), AUTOPILOT_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [update]);
+
   /** Helper: change one ticket and record what happened in its history. */
-  const editTicket = useCallback((id: string, change: (t: Ticket) => Partial<Ticket>, note?: string) => {
-    setData((d) =>
-      d && {
+  const editTicket = useCallback(
+    (id: string, change: (t: Ticket) => Partial<Ticket>, note?: string, author = CURRENT_USER) =>
+      update((d) => ({
         ...d,
         tickets: d.tickets.map((t) => {
           if (t.id !== id) return t;
           const updated = { ...t, ...change(t) };
-          if (note) updated.notes = [...t.notes, { at: new Date().toISOString(), author: CURRENT_USER, text: note }];
+          if (note) updated.notes = [...t.notes, { at: new Date().toISOString(), author, text: note }];
           return updated;
         }),
-      },
-    );
-  }, []);
+      })),
+    [update],
+  );
 
   if (!data) {
     return <div className="p-10 text-sm text-slate-500">Loading…</div>;
@@ -103,54 +122,66 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         () => ({ status, completedAt: status === "Completed" ? new Date().toISOString() : undefined }),
         `Status changed to ${status}`,
       ),
+    // A person choosing a technician overrides the Autopilot for this ticket.
     assignTechnician: (id, techId) =>
       editTicket(
         id,
-        (t) => ({ assignedTechId: techId, status: techId && t.status === "Pending" ? "Assigned" : t.status }),
+        (t) => ({ assignedTechId: techId, manualOnly: true, status: techId && t.status === "Pending" ? "Assigned" : t.status }),
         techId ? `Assigned to ${techName(techId)}` : "Technician removed",
       ),
     setPriority: (id, priority) =>
       editTicket(id, (t) => ({ priority, dueAt: dueDateFor(priority, new Date(t.createdAt)) }), `Priority set to ${priority}`),
     addNote: (id, text) => editTicket(id, () => ({}), text),
     markReviewed: (id) => editTicket(id, () => ({ needsReview: false }), "Reviewed by a person and cleared"),
-    createTicket: (input) => {
+    createTicket: (input, opts = {}) => {
       const now = new Date();
+      const at = now.toISOString();
+      const author = opts.byAutopilot ? AUTOPILOT : CURRENT_USER;
       const ticket: Ticket = {
         ...input,
         id: `SR-${data.nextTicketNumber}`,
-        createdAt: now.toISOString(),
+        createdAt: at,
         dueAt: dueDateFor(input.priority, now),
         status: "Pending",
-        notes: [{ at: now.toISOString(), author: CURRENT_USER, text: `Ticket created (${input.source})` }],
+        notes: [
+          { at, author, text: `Ticket created (${input.source})` },
+          ...(opts.note ? [{ at, author, text: opts.note }] : []),
+        ],
       };
-      setData((d) => d && { ...d, tickets: [ticket, ...d.tickets], nextTicketNumber: d.nextTicketNumber + 1 });
+      update((d) => ({
+        ...d,
+        tickets: [ticket, ...d.tickets],
+        nextTicketNumber: d.nextTicketNumber + 1,
+        automation: opts.byAutopilot
+          ? { ...d.automation, log: [{ id: `C${ticket.id}`, at, kind: "create", ticketId: ticket.id, text: `Created ${ticket.id} from email: ${ticket.subject}` }, ...d.automation.log] }
+          : d.automation,
+      }));
       return ticket;
     },
     setTechDuty: (techId, duty) =>
-      setData((d) => {
-        if (!d) return d;
+      update((d) => {
         const name = techName(techId);
         const at = new Date().toISOString();
         return {
           ...d,
           technicians: d.technicians.map((t) => (t.id === techId ? { ...t, duty } : t)),
-          // If a tech is out, flag their unfinished jobs so the office can reassign them.
-          // (We never reassign automatically — a person decides.)
+          // If a tech is out: the Autopilot reassigns routine jobs on its next pass.
+          // Jobs it isn't allowed to handle are flagged for a person.
           tickets:
             duty === "On Duty"
               ? d.tickets
-              : d.tickets.map((t) =>
-                  t.assignedTechId === techId && t.status !== "Completed"
-                    ? {
-                        ...t,
-                        needsReview: true,
-                        reviewReason: `${name} is now "${duty}". Reassign this job?`,
-                        notes: [...t.notes, { at, author: name, text: `Technician marked "${duty}"` }],
-                      }
-                    : t,
-                ),
+              : d.tickets.map((t) => {
+                  if (t.assignedTechId !== techId || t.status === "Completed") return t;
+                  const notes = [...t.notes, { at, author: name, text: `Technician marked "${duty}"` }];
+                  return d.automation.settings.autoReassign && canAutomate(t)
+                    ? { ...t, notes }
+                    : { ...t, notes, needsReview: true, reviewReason: `${name} is now "${duty}". Reassign this job?` };
+                }),
         };
       }),
+    setAutomation: (settings) =>
+      update((d) => ({ ...d, automation: { ...d.automation, settings: { ...d.automation.settings, ...settings } } })),
+    undoAutomation: (logId) => update((d) => undoAction(d, logId)),
     resetDemoData: () => setData(freshData()),
   };
 
